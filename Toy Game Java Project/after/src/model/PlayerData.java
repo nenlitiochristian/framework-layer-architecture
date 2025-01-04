@@ -1,5 +1,6 @@
 package model;
 
+import factory.OrderFactory;
 import game.ToyList;
 import game.WorkerList;
 import observer.Observable;
@@ -98,7 +99,8 @@ public class PlayerData extends Observable implements Observer {
 				myToys = new ToyList();
 			}
 			if (currentOrder == null) {
-				currentOrder = new Order(myWorkers.getTotalWorkers(), difficulty);
+				OrderFactory factory = new OrderFactory();
+				currentOrder = factory.createOrder(myWorkers.getTotalWorkers(), difficulty);
 			}
 			return new PlayerData(username, money, difficulty, ordersDone, currentExperience, isFinished, myWorkers,
 					myToys, currentOrder);
@@ -128,7 +130,8 @@ public class PlayerData extends Observable implements Observer {
 		ToyType currentType = currentOrder.getToy().getToyType();
 		int amountSold = currentOrder.getToy().getToyAmount();
 		int earnedMoney = myToys.getToy(currentType).sellToy(amountSold);
-		setCurrentOrder(new Order(myWorkers.getTotalWorkers(), difficulty));
+		OrderFactory factory = new OrderFactory();
+		setCurrentOrder(factory.createOrder(myWorkers.getTotalWorkers(), difficulty));
 		ordersDone++;
 
 		earnExperience(1);
