@@ -8,6 +8,86 @@ import observer.Observer;
 import utils.RandomNumber;
 
 public class PlayerData extends Observable implements Observer {
+
+	public Memento saveState() {
+		return new Memento(money, difficulty, ordersDone, currentExperience, isFinished, myWorkers, myToys,
+				currentOrder);
+	}
+
+	public void restoreState(Memento memento) {
+		this.money = memento.getMoney();
+		this.difficulty = memento.getDifficulty();
+		this.ordersDone = memento.getOrdersDone();
+		this.currentExperience = memento.getCurrentExperience();
+		this.isFinished = memento.isFinished();
+
+		this.myWorkers = memento.getMyWorkers();
+		this.myToys = memento.getMyToys();
+		this.currentOrder = memento.getCurrentOrder();
+
+		notify("updated");
+	}
+
+	public static class Memento {
+		// kita tidak perlu simpan username karena username tidak bisa diubah
+		private final int money;
+		private final int difficulty;
+		private final int ordersDone;
+		private final int currentExperience;
+		private final boolean isFinished;
+
+		private final WorkerList myWorkers;
+		private final ToyList myToys;
+		private final Order currentOrder;
+
+		private Memento(int money, int difficulty, int ordersDone, int currentExperience, boolean isFinished,
+				WorkerList myWorkers, ToyList myToys, Order currentOrder) {
+			this.money = money;
+			this.difficulty = difficulty;
+			this.ordersDone = ordersDone;
+			this.currentExperience = currentExperience;
+			this.isFinished = isFinished;
+
+			// kita perlu deep copy untuk class WorkerList, ToyList, dan Order
+			// ini akan kita lakukan dengan menerapkan Prototype design pattern
+			this.myWorkers = myWorkers.deepClone();
+			this.myToys = myToys.deepClone();
+			this.currentOrder = currentOrder.deepClone();
+		}
+
+		private int getMoney() {
+			return money;
+		}
+
+		private int getDifficulty() {
+			return difficulty;
+		}
+
+		private int getOrdersDone() {
+			return ordersDone;
+		}
+
+		private int getCurrentExperience() {
+			return currentExperience;
+		}
+
+		private boolean isFinished() {
+			return isFinished;
+		}
+
+		private WorkerList getMyWorkers() {
+			return myWorkers.deepClone();
+		}
+
+		private ToyList getMyToys() {
+			return myToys.deepClone();
+		}
+
+		private Order getCurrentOrder() {
+			return currentOrder.deepClone();
+		}
+	}
+
 	private final String username;
 	private int money;
 	private int difficulty;
@@ -146,14 +226,9 @@ public class PlayerData extends Observable implements Observer {
 				+ (int) (0.5 * calculateLevelUpTarget(x - 1));
 	}
 
-	public boolean tryUpgradingWorker(int workerLevel) {
-		if (workerLevel == WorkerList.MAX_WORKER_LEVEL)
-			return false;
-		if (money < myWorkers.getUpgradePrice(workerLevel))
-			return false;
+	public void upgradeWorker(int workerLevel) {
 		spendMoney(myWorkers.getUpgradePrice(workerLevel));
 		myWorkers.upgradeWorkers(workerLevel);
-		return true;
 	}
 
 	public String getUsername() {

@@ -159,4 +159,12 @@ public class PlayerData {
 	public void setFinished(boolean isFinished) {
 		this.isFinished = isFinished;
 	}
+
+	public ToyList getMyToys() {
+		return myToys;
+	}
+
+	public WorkerList getMyWorkers() {
+		return myWorkers;
+	}
 }

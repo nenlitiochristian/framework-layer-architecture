@@ -1,12 +1,13 @@
 package game;
 
-import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
+import command.BuyWorkerCommand;
+import command.CommandManager;
+import command.ProduceToysCommand;
+import command.UpgradeWorkerCommand;
 import model.PlayerData;
-import model.PlayerData.PlayerDataBuilder;
 import model.Toy;
 import model.ToyType;
 import observer.Observer;
@@ -16,7 +17,9 @@ import utils.Repository;
 
 public class Game implements Observer {
 	private Repository repository = new CachedRepository(new PlayerDataRepository());
-	private PlayerData currentPlayer = null;
+	private PlayerData currentPlayer;
+	private CommandManager invoker;
+	private Scanner scan;
 
 	@Override
 	public void receive(String message) {
@@ -25,47 +28,11 @@ public class Game implements Observer {
 		}
 	}
 
-	private Scanner scan = new Scanner(System.in);
-
-	public Game() {
-		boolean gameOver = false;
-		while (!gameOver) {
-			clearScreen();
-			System.out.println("Toy Factory Manager");
-			System.out.println("1. New Game");
-			System.out.println("2. Load Game");
-			System.out.println("3. Highscore");
-			System.out.println("4. Exit");
-			System.out.print(">> ");
-
-			int userChoice = -1;
-			try {
-				userChoice = Integer.parseInt(scan.next());
-			} catch (NumberFormatException e) {
-				continue;
-			}
-
-			switch (userChoice) {
-			case 1:
-				currentPlayer = makeNewPlayer();
-				if (currentPlayer == null)
-					break;
-				startGame();
-				break;
-			case 2:
-				currentPlayer = loadExistingPlayer();
-				if (currentPlayer == null)
-					break;
-				startGame();
-				break;
-			case 3:
-				showLeaderboard();
-				break;
-			case 4:
-				gameOver = true;
-				break;
-			}
-		}
+	public Game(Scanner scan, PlayerData playerData) {
+		currentPlayer = playerData;
+		invoker = new CommandManager();
+		this.scan = scan;
+		startGame();
 	}
 
 	public void startGame() {
@@ -92,9 +59,10 @@ public class Game implements Observer {
 			showPlayerData(currentPlayer, "Order", "Player");
 			System.out.println("1. Show Toy List");
 			System.out.println("2. Produce Toys");
-			System.out.println("3. Manage Workers");
-			System.out.println("4. Exit Game (Your progress is always saved automatically)");
-			System.out.println("5. End Game");
+			System.out.println("3. Undo previous action");
+			System.out.println("4. Manage Workers");
+			System.out.println("5. Exit Game (Your progress is always saved automatically)");
+			System.out.println("6. End Game");
 			System.out.print(">> ");
 
 			try {
@@ -111,13 +79,15 @@ public class Game implements Observer {
 				produceToys(currentPlayer);
 				break;
 			case 3:
-				manageWorkers(currentPlayer, scan);
+				undoLastAction();
 				break;
 			case 4:
+				manageWorkers(currentPlayer, scan);
+				break;
+			case 5:
 				continueGame = false;
 				break;
-
-			case 5:
+			case 6:
 				clearScreen();
 				String yesOrNo = "";
 				boolean keepLooping = true;
@@ -147,6 +117,14 @@ public class Game implements Observer {
 		} while (continueGame);
 	}
 
+	private void undoLastAction() {
+		if (invoker.canUndoCommand()) {
+			invoker.undoCommand();
+		} else {
+			System.out.println("There are no actions to undo!");
+		}
+	}
+
 	private void showToyList(PlayerData playerData) {
 		clearScreen();
 		showPlayerData(playerData, "Order", "ToyList");
@@ -174,12 +152,7 @@ public class Game implements Observer {
 
 		clearScreen();
 		showPlayerData(playerData, "Order");
-		System.out.println(
-				"Your factory has produced " + playerData.makeToys(workhours) + " toys in " + workhours + " hours");
-
-		if (playerData.orderCanBeFinished()) {
-			System.out.println("You have finished an order and received " + playerData.finishOrder() + "gold");
-		}
+		invoker.executeCommand(new ProduceToysCommand(playerData, workhours));
 
 		System.out.println("Press enter to go back...");
 		try {
@@ -241,12 +214,13 @@ public class Game implements Observer {
 				}
 			}
 		}
+
 		if (playerData.getMoney() >= 500) {
-			System.out.println("Bought a level 1 worker for 500 gold");
-			playerData.buyWorker();
+			invoker.executeCommand(new BuyWorkerCommand(currentPlayer));
 		} else {
 			System.out.println("Not enough money");
 		}
+
 		System.out.println("Press enter to go back...");
 		try {
 			System.in.read();
@@ -304,11 +278,10 @@ public class Game implements Observer {
 
 		if (playerData.getWorkerList().getWorker(workerLevel) < 1) {
 			System.out.println("You don't have a worker of that type");
-		} else if (playerData.tryUpgradingWorker(workerLevel)) {
-			System.out.println("Upgraded a level " + (workerLevel) + " worker for "
-					+ playerData.getWorkerList().getUpgradePrice(workerLevel) + " gold");
-		} else {
+		} else if (playerData.getMoney() < playerData.getWorkerList().getUpgradePrice(workerLevel)) {
 			System.out.println("Not enough money");
+		} else {
+			invoker.executeCommand(new UpgradeWorkerCommand());
 		}
 
 		System.out.println("Press enter to go back...");
@@ -325,72 +298,6 @@ public class Game implements Observer {
 		playerData.setFinished(true);
 	}
 
-	public PlayerData makeNewPlayer() {
-		clearScreen();
-		System.out.println("Toy Factory Manager");
-		while (true) {
-			System.out.print("Input player's name [0 to go back]: ");
-
-			String userInput = scan.next();
-			if (userInput.charAt(0) == '0' && userInput.length() == 1) {
-				return null;
-			} else if (userInput.length() < 3 || userInput.length() > 20) {
-				System.out.println("Name must be between 3 to 20 characters");
-				continue;
-			} else if (playerNameAlreadyExists(userInput)) {
-				System.out.println("User with that name already exists!");
-				continue;
-			}
-
-			// kalau kita tidak butuh detail, bisa pake defaultnya
-			PlayerDataBuilder builder = new PlayerDataBuilder();
-			PlayerData newPlayer = builder.build(userInput);
-			repository.savePlayerData(newPlayer);
-			return newPlayer;
-		}
-	}
-
-	public PlayerData loadExistingPlayer() {
-		clearScreen();
-		System.out.println("Toy Factory Manager");
-
-		// we can only play games that aren't finished yet
-		List<PlayerData> playerDatas = repository.getAllPlayerData().stream().filter(data -> !data.isFinished())
-				.collect(Collectors.toList());
-
-		// print all available usernames
-		int playerCount = 0;
-		for (PlayerData data : playerDatas) {
-			playerCount++;
-			System.out.printf("%d. %s\n", playerCount, data.getUsername());
-		}
-
-		if (playerCount == 0) {
-			System.out.println("No player found, returning in 3 seconds...");
-			try {
-				TimeUnit.SECONDS.sleep(3);
-				return null;
-			} catch (InterruptedException e) {
-				System.out.println("Sleep() failed");
-				return null;
-			}
-		}
-
-		int userInput;
-		while (true) {
-			System.out.println("Pick a save file [0 to cancel]: ");
-			try {
-				userInput = Integer.parseInt(scan.next());
-			} catch (NumberFormatException e) {
-				continue;
-			}
-			if (userInput == 0) {
-				return null;
-			} else if (userInput >= 1 && userInput <= playerCount)
-				return playerDatas.get(playerCount - 1);
-		}
-	}
-
 	public void showPlayerData(PlayerData playerData, String... modes) {
 		System.out.println(" " + playerData.getUsername() + "'s Factory");
 		System.out.println("==================================");
@@ -398,7 +305,8 @@ public class Game implements Observer {
 			switch (mode) {
 			case "Order":
 				System.out.println(" Current Order");
-				System.out.printf(" Toy Type: %s\n", playerData.getCurrentOrderData().getToy().getToyName());
+				System.out.printf(" Toy Type: %s\n",
+						playerData.getCurrentOrderData().getToy().getToyType().getToyName());
 				System.out.printf(" Level: %s\n", playerData.getCurrentOrderData().getLevel());
 				System.out.printf(" Quantity: %s\n", playerData.getCurrentOrderData().getToy().getToyAmount());
 				System.out.printf(" Time: %s\n", playerData.getCurrentOrderData().getCountdown());
@@ -419,7 +327,7 @@ public class Game implements Observer {
 						ToyType.TRAIN_SET, ToyType.TRANSFORM_ROBOT };
 				for (ToyType toyType : toyTypes) {
 					Toy toy = tempTL.getToy(toyType);
-					System.out.printf(" %-16s | %-5d | %-5d \n", toy.getToyName(), toy.getToyPrice(),
+					System.out.printf(" %-16s | %-5d | %-5d \n", toy.getToyType().getToyName(), toy.getToyPrice(),
 							toy.getToyAmount());
 				}
 				System.out.println("==================================");
@@ -440,42 +348,6 @@ public class Game implements Observer {
 
 	public boolean playerNameAlreadyExists(String username) {
 		return repository.getAllPlayerData().stream().anyMatch(data -> data.getUsername().equals(username));
-	}
-
-	public void showLeaderboard() {
-		// we only show finished games in the leaderboard
-		List<PlayerData> playerDatas = repository.getAllPlayerData().stream().filter(data -> data.isFinished())
-				.collect(Collectors.toList());
-
-		System.out.println("Toy Factory Manager Leaderboard");
-		System.out.println("==================================================");
-		if (playerDatas.isEmpty()) {
-			System.out.println("No data found....");
-			System.out.println("Press enter to go back...");
-			try {
-				System.in.read();
-			} catch (Exception e) {
-				return;
-			}
-			return;
-		}
-
-		playerDatas.sort((a, b) -> a.getOrdersDone() - b.getOrdersDone());
-
-		// print the sorted data
-		System.out.printf(" %-3s | %-20s | %-11s | %-5s\n", "No.", "Username", "Orders Done", "Money");
-		for (int i = 0; i < playerDatas.size(); i++) {
-			System.out.printf(" %-3s | %-20s | %-11s | %-5s\n", "No.", playerDatas.get(i).getUsername(),
-					playerDatas.get(i).getOrdersDone(), playerDatas.get(i).getMoney());
-		}
-		System.out.println("==================================================");
-		System.out.println("Press enter to go back...");
-		try {
-			System.in.read();
-		} catch (Exception e) {
-			return;
-		}
-		return;
 	}
 
 	public void clearScreen() {

@@ -6,9 +6,23 @@ import java.util.List;
 import model.Toy;
 import model.ToyType;
 import observer.Observable;
+import prototype.DeepClonable;
 
-public class ToyList extends Observable {
+public class ToyList extends Observable implements DeepClonable<ToyList> {
 	private List<Toy> toys = new ArrayList<>();
+
+	@Override
+	public ToyList deepClone() {
+		List<Toy> clonedToys = new ArrayList<>();
+		for (Toy t : toys) {
+			clonedToys.add(t.deepClone());
+		}
+		return new ToyList(clonedToys);
+	}
+
+	private ToyList(List<Toy> toys) {
+		this.toys = toys;
+	}
 
 	public ToyList() {
 		toys.add(new Toy(ToyType.TEDDY_BEAR, 0));
@@ -48,4 +62,5 @@ public class ToyList extends Observable {
 		}
 		throw new IllegalArgumentException("Invalid toy type");
 	}
+
 }

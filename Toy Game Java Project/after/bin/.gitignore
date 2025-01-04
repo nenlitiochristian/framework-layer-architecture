@@ -4,3 +4,6 @@
 /observer/
 /utils/
 /factory/
+/command/
+/prototype/
+/iterator/

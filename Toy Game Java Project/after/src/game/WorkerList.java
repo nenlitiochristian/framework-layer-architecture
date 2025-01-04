@@ -1,10 +1,16 @@
 package game;
 
 import observer.Observable;
+import prototype.DeepClonable;
 
-public class WorkerList extends Observable {
+public class WorkerList extends Observable implements DeepClonable<WorkerList> {
 	public static final int MAX_WORKER_LEVEL = 5;
 	private int[] workerAmounts = new int[MAX_WORKER_LEVEL];
+
+	@Override
+	public WorkerList deepClone() {
+		return new WorkerList(workerAmounts[0], workerAmounts[1], workerAmounts[2], workerAmounts[3], workerAmounts[4]);
+	}
 
 	public WorkerList() {
 		addNewWorker().addNewWorker().addNewWorker().addNewWorker().addNewWorker();

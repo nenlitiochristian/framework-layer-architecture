@@ -1,8 +1,15 @@
 package model;
 
-public class Toy {
+import prototype.DeepClonable;
+
+public class Toy implements DeepClonable<Toy> {
 	private final ToyType toyType;
 	private int toyAmount = 0;
+
+	@Override
+	public Toy deepClone() {
+		return new Toy(toyType, toyAmount);
+	}
 
 	public Toy(ToyType toyType, int toyAmount) {
 		this.toyType = toyType;
@@ -11,24 +18,6 @@ public class Toy {
 
 	public ToyType getToyType() {
 		return toyType;
-	}
-
-	public String getToyName() {
-		switch (toyType) {
-		case RC_CAR:
-			return "RC Car";
-		case TEDDY_BEAR:
-			return "Teddy Bear";
-		case TOY_CAR:
-			return "Toy Car";
-		case TOY_PLANE:
-			return "Toy Plane";
-		case TRAIN_SET:
-			return "Train Set";
-		case TRANSFORM_ROBOT:
-			return "Transform Robot";
-		}
-		return "Error";
 	}
 
 	public int getToyPrice() {

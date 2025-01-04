@@ -1,11 +1,13 @@
 package game;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import model.Order;
 import model.PlayerData;
 import model.Toy;
 import model.ToyType;
@@ -14,49 +16,10 @@ import utils.Repository;
 
 public class Game {
 	private Repository repository = new PlayerDataRepository();
+	private List<PlayerData> previousDatas = new ArrayList<>();
 
-	public Game() {
-		Scanner scan = new Scanner(System.in);
-		boolean gameOver = false;
-		while (!gameOver) {
-			clearScreen();
-			System.out.println("Toy Factory Manager");
-			System.out.println("1. New Game");
-			System.out.println("2. Load Game");
-			System.out.println("3. Highscore");
-			System.out.println("4. Exit");
-			System.out.print(">> ");
-
-			int userChoice = -1;
-			try {
-				userChoice = Integer.parseInt(scan.next());
-			} catch (NumberFormatException e) {
-				continue;
-			}
-
-			PlayerData currentPlayer = null;
-			switch (userChoice) {
-			case 1:
-				currentPlayer = makeNewPlayer(scan);
-				if (currentPlayer == null)
-					break;
-				startGame(scan, currentPlayer);
-				break;
-			case 2:
-				currentPlayer = loadExistingPlayer(scan);
-				if (currentPlayer == null)
-					break;
-				startGame(scan, currentPlayer);
-				break;
-			case 3:
-				showLeaderboard(scan);
-				break;
-			case 4:
-				gameOver = true;
-				break;
-			}
-		}
-		scan.close();
+	public Game(Scanner scan, PlayerData playerData) {
+		startGame(scan, playerData);
 	}
 
 	public void startGame(Scanner scan, PlayerData playerData) {
@@ -83,9 +46,10 @@ public class Game {
 			showPlayerData(playerData, "Order", "Player");
 			System.out.println("1. Show Toy List");
 			System.out.println("2. Produce Toys");
-			System.out.println("3. Manage Workers");
-			System.out.println("4. Exit Game (Your progress is always saved automatically)");
-			System.out.println("5. End Game");
+			System.out.println("3. Undo previous action");
+			System.out.println("4. Manage Workers");
+			System.out.println("5. Exit Game (Your progress is always saved automatically)");
+			System.out.println("6. End Game");
 			System.out.print(">> ");
 
 			try {
@@ -102,13 +66,15 @@ public class Game {
 				produceToys(playerData);
 				break;
 			case 3:
-				manageWorkers(playerData, scan);
+				playerData = undoLastAction();
 				break;
 			case 4:
+				manageWorkers(playerData, scan);
+				break;
+			case 5:
 				continueGame = false;
 				break;
-
-			case 5:
+			case 6:
 				clearScreen();
 				String yesOrNo = "";
 				boolean keepLooping = true;
@@ -138,6 +104,13 @@ public class Game {
 		} while (continueGame);
 	}
 
+	private PlayerData undoLastAction() {
+		if (previousDatas.isEmpty()) {
+			System.out.println("Can't undo further!");
+		}
+		return previousDatas.remove(previousDatas.size() - 1);
+	}
+
 	private void showToyList(PlayerData playerData) {
 		clearScreen();
 		showPlayerData(playerData, "Order", "ToyList");
@@ -149,7 +122,31 @@ public class Game {
 		}
 	}
 
+	public static PlayerData copyPlayerData(PlayerData playerData) {
+		WorkerList originalWorkers = playerData.getMyWorkers();
+		WorkerList copiedWorkers = new WorkerList(originalWorkers.getWorker(1), originalWorkers.getWorker(2),
+				originalWorkers.getWorker(3), originalWorkers.getWorker(4), originalWorkers.getWorker(5));
+
+		ToyList originalToys = playerData.getMyToys();
+		ToyList copiedToys = new ToyList();
+		for (ToyType toyType : ToyType.values()) {
+			copiedToys.addToy(toyType, originalToys.getToy(toyType).getToyAmount());
+		}
+
+		Order originalOrder = playerData.getCurrentOrderData();
+		Order copiedOrder = null;
+		if (originalOrder != null) {
+			Toy copiedToy = new Toy(originalOrder.getToy().getToyType(), originalOrder.getToy().getToyAmount());
+			copiedOrder = new Order(copiedToy, originalOrder.getLevel(), originalOrder.getCountdown());
+		}
+
+		return new PlayerData(playerData.getUsername(), playerData.getMoney(), playerData.getDifficulty(),
+				playerData.getOrdersDone(), playerData.getCurrentExperience(), playerData.isFinished(), copiedWorkers,
+				copiedToys, copiedOrder);
+	}
+
 	private void produceToys(PlayerData playerData) {
+
 		int workhours = playerData.decideWorkhours();
 		for (String progressBar = "#"; progressBar.length() < "##########".length(); progressBar += "#") {
 			clearScreen();
@@ -162,6 +159,9 @@ public class Game {
 				e.printStackTrace();
 			}
 		}
+		// simpan dulu sebelum bikn toys dan finish order
+		PlayerData copy = copyPlayerData(playerData);
+		previousDatas.add(copy);
 
 		clearScreen();
 		showPlayerData(playerData, "Order");
@@ -235,6 +235,7 @@ public class Game {
 		if (playerData.getMoney() >= 500) {
 			System.out.println("Bought a level 1 worker for 500 gold");
 			playerData.buyWorker();
+			previousDatas.add(copyPlayerData(playerData));
 		} else {
 			System.out.println("Not enough money");
 		}
@@ -298,6 +299,7 @@ public class Game {
 		} else if (playerData.tryUpgradingWorker(workerLevel)) {
 			System.out.println("Upgraded a level " + (workerLevel) + " worker for "
 					+ playerData.getWorkerList().getUpgradePrice(workerLevel) + " gold");
+			previousDatas.add(copyPlayerData(playerData));
 		} else {
 			System.out.println("Not enough money");
 		}
@@ -313,29 +315,6 @@ public class Game {
 	private void endGame(PlayerData playerData) {
 		playerData.setFinished(true);
 		repository.savePlayerData(playerData);
-	}
-
-	public PlayerData makeNewPlayer(Scanner scan) {
-		clearScreen();
-		System.out.println("Toy Factory Manager");
-		while (true) {
-			System.out.print("Input player's name [0 to go back]: ");
-
-			String userInput = scan.next();
-			if (userInput.charAt(0) == '0' && userInput.length() == 1) {
-				return null;
-			} else if (userInput.length() < 3 || userInput.length() > 20) {
-				System.out.println("Name must be between 3 to 20 characters");
-				continue;
-			} else if (playerNameAlreadyExists(userInput)) {
-				System.out.println("User with that name already exists!");
-				continue;
-			}
-
-			PlayerData newPlayer = new PlayerData(userInput);
-			repository.savePlayerData(newPlayer);
-			return newPlayer;
-		}
 	}
 
 	public PlayerData loadExistingPlayer(Scanner scan) {
@@ -424,10 +403,6 @@ public class Game {
 
 			}
 		}
-	}
-
-	public boolean playerNameAlreadyExists(String username) {
-		return repository.getAllPlayerData().stream().anyMatch(data -> data.getUsername().equals(username));
 	}
 
 	public void showLeaderboard(Scanner scan) {
